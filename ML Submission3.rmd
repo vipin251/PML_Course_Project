@@ -1,0 +1,64 @@
+---
+title: "Practical Machine Learning Project"
+author: "Vipin"
+date: "October 20, 2015"
+output: html_document
+---
+## Objective
+People use devices to collect data about their personal activity.These type of devices are part of the quantified self movement.The objective is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website  here: http://groupware.les.inf.puc-rio.br/har.   
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. Use the other available variables to predict the way a participant did the project.
+
+## Reading and Preprocessing of the data  
+Read the training files. Some of the columns are NAs. Remove those columns. Also checked the columns wiht no or near zero variability.
+
+```{r, cache=TRUE,comment=F,warning=FALSE,message=F}
+# Read files
+library(caret)
+raw_file <- read.csv("pml-training.csv",na.strings = "NA",stringsAsFactors = F)
+
+#get number of NAs in each cols
+nas <- (sapply((lapply(raw_file, is.na)), sum))
+# Remove columns with all NAs
+na_removed <- raw_file[,nas<19000]
+
+#Remove cols contains No data
+raw_cleaned <- na_removed[,-c(grep("^kurtosis|^skewness|^max_yaw|^min_yaw|^amplitude|new_window|cvtd_timestamp", names(na_removed)))]
+
+#nearZeroVar(raw_cleaned,saveMetrics = T)
+
+```
+
+##Create a train and test set  
+The data is then partitioned into a test and a train set. 75% of the data is used to train the model and rest is used for testing.
+```{r, cache=T}
+set.seed(122)
+Intrain <- createDataPartition(raw_cleaned$classe, p = 0.75, list = F)
+train <- raw_cleaned[Intrain,]
+test <- raw_cleaned[-Intrain,]
+```
+## Fit a random forest model with 5 Fold cross validation
+Different models like rpart and gbm tried for prediction and randomforest gives highly accurate metrics with 100 trees. Model is then validated with 5 fold cross validation.
+```{r,cache=T,comment=NA,warning=F}
+library(caret)
+rf_fit <- train(as.factor(classe) ~ ., 
+                method = "rf",
+                data = train[,-c(1,2)],
+                ntree = 100,
+                na.action = na.omit,
+                importance = TRUE,
+                keep.inbag=T,tuneLength=1,
+                trControl = trainControl(method = "cv",
+                                         number = 5))
+
+  
+print(rf_fit)
+rf_fit$finalModel
+```
+# Validate the model using the test data set  
+Final model has a **OOB error rate less than 0.12%**after 5 fold cross validation and is highly accurate with Accuracy .999. The model is then tested with the test set and following results obtained.
+```{r, cache=T}
+
+test$predict <- predict(rf_fit,test[,-c(1,2)],type = "raw")
+confusionMatrix(test$predict, test$classe)
+
+```
